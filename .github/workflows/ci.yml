@@ -1,0 +1,14 @@
+name: CI Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run test
+        run: |
+          echo "Running application tests..."
+          python3 -c 'assert 2 + 2 == 5, "Test failed: incorrect result"'
