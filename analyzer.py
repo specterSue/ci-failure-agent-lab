@@ -7,7 +7,7 @@ client = genai.Client()
 
 response = client.models.generate_content(
 
-    model="genmini-2.5-flash-lite",
+    model="gemini-2.5-flash-lite",
     contents=f""" 
     You are a senior DevOps engineer investigating a CI failure.
 
