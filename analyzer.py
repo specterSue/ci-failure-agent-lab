@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from google import genai
+from google.genai.errors import ServerError
 
 # 1. Read the failed CI logs and the actual source file
 logs = Path("failure.log").read_text(encoding="utf-8")
@@ -11,9 +12,9 @@ original_code = target.read_text(encoding="utf-8")
 # 2. Ask Gemini to diagnose the failure and propose a patch
 client = genai.Client()
 
-response = client.models.generate_content(
-    model="gemini-3.5-flash-lite",
-    contents=f"""
+
+# 3. Build the prompt once
+prompt = f"""
 You are a senior DevOps engineer investigating a CI failure.
 
 Analyze the logs and source code.
@@ -36,11 +37,44 @@ FAILED LOGS:
 
 SOURCE FILE (.github/workflows/ci.yml):
 {original_code}
-""",
-    config={"response_mime_type": "application/json"}
-)
+"""
+# 4. Models ordered by cost (cheapest first)
+models = [
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+]
 
-# 3. Parse and save Gemini's analysis
+# 5. Try models until one succeeds
+response = None
+
+for model in models:
+    try:
+        print(f"Trying {model}...", flush=True)
+
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config={"response_mime_type": "application/json"}
+        )
+
+        if not response.text:
+            raise RuntimeError(f"{model} returned an empty response")
+
+        print(f"Success using {model}", flush=True)
+        break
+
+    except ServerError as error:
+        if error.code != 503:
+            raise
+
+        print(f"{model} unavailable (503). Trying next...", flush=True)
+
+# 6. Fail safely if every model was unavailable
+if response is None:
+    raise RuntimeError("All Gemini models are unavailable")
+
+# 7. Parse and save Gemini's analysis
 analysis = json.loads(response.text)
 
 Path("analysis.md").write_text(
@@ -51,7 +85,7 @@ Path("analysis.md").write_text(
 print("Root cause:", analysis["root_cause"])
 print("Suggested fix:", analysis["suggested_fix"])
 
-# 4. Validate the proposed replacement before changing anything
+# 8. Validate the proposed replacement before changing anything
 if analysis.get("safe_to_apply") is not True:
     raise RuntimeError("Gemini could not propose an unambiguous fix")
 
@@ -67,7 +101,7 @@ if not old.strip() or not new.strip() or old == new:
 if original_code.count(old) != 1:
     raise RuntimeError("Original text must occur exactly once")
 
-# 5. Apply the fix to the runner's local file
+# 9. Apply the fix to the runner's local file
 fixed_code = original_code.replace(old, new, 1)
 target.write_text(fixed_code, encoding="utf-8")
 
