@@ -16,7 +16,7 @@ else:
     suggested_fix = "Manual investigation required"
 
 # Read MR URL if creation succeeded
-mr_file = Path("mr_url.txt")
+mr_file = Path("pr_url.txt")
 
 if mr_file.exists():
     mr_status = "Open - pending human review"
