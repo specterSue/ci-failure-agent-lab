@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 
 # 1. GitHub configuration
-token = os.environ["GH_PR_TOKEN"]
+token = os.environ["GEMINI_API_KEY"]
 repo = os.environ["GITHUB_REPOSITORY"]
 
 base_url = f"https://api.github.com/repos/{repo}"
