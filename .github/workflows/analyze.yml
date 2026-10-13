@@ -31,7 +31,6 @@ jobs:
           gh run view "$RUN_ID" --repo "$GH_REPO" --log-failed > failure.log
           cat failure.log
 
-
       - name: Analyze failure with Gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -39,3 +38,58 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install google-genai
           .venv/bin/python analyzer.py
+
+      - name: Upload AI analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis
+          path: analysis.md
+          if-no-files-found: error
+
+      - name: Validate generated fix
+        run: |
+          .venv/bin/python -m pip install pyyaml
+
+          # Verify that Gemini actually changed something
+          if git diff --quiet; then
+            echo "ERROR: No changes generated"
+            exit 1
+          fi
+
+          # Check for whitespace errors and conflict markers
+          git diff --check
+
+          # Validate YAML syntax if a YAML file was modified
+          .venv/bin/python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          import yaml
+
+          changed_files = subprocess.check_output(
+              ["git", "diff", "--name-only"],
+              text=True
+          ).splitlines()
+
+          for filename in changed_files:
+              if Path(filename).suffix in (".yml", ".yaml"):
+                  with open(filename) as f:
+                      yaml.safe_load(f)
+                  print(f"Valid YAML: {filename}")
+          PY
+
+      - name: Create GitLab Merge Request
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}
+        run: |
+          .venv/bin/python -m pip install requests
+          .venv/bin/python create_mr.py
+
+      - name: Send failure analysis email
+        if: always()
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          python3 send_email.py
