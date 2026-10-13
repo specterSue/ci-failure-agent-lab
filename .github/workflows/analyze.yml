@@ -18,3 +18,12 @@ jobs:
         run: |
           echo "Failed run: ${{ github.event.workflow_run.id }}"
           echo "Preparing to analyze logs..."
+          
+      - name: Retrieve failed logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run view "$RUN_ID" --repo "$GH_REPO" --log-failed > failure.log
+          cat failure.log
